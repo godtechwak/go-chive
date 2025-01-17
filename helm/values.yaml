@@ -1,0 +1,46 @@
+nameOverride: ""
+fullnameOverride: "db-go-chive"
+
+serviceAccountName: ""
+
+image: 
+  repository: <ACCOUNT ID>.dkr.ecr.ap-northeast-2.amazonaws.com/db/go-chive
+  tag: 1.0.0-go-chive
+
+data: 
+  - name: test1
+    hostAddress: "test"
+    ageLimit: 1d
+    archiveCheckInterval: 60
+    collection: test
+    database: test
+    archiveField: createdAt
+    s3:
+      bucket: bumhwak-test/test1
+      uploadInterval: 180
+  - name: test2
+    hostAddress: "test2"
+    ageLimit: 2d
+    archiveCheckInterval: 80
+    collection: test2
+    database: test2
+    archiveField: updatedAt
+    s3:
+      bucket: bumhwak-test/test2
+      uploadInterval: 180
+
+livenessProbe: {}
+
+readinessProbe: {}
+
+resources: {}
+
+securityContext: {}
+
+affinity: {}
+
+nodeSelector: {}
+
+priorityClassName: {}
+
+tolerations: []
