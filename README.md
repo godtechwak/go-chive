@@ -1,5 +1,5 @@
 # go-chive
-MongoDB에서 아카이빙이 필요한 도큐먼트를 추출하여 S3 버킷에 보관 및 삭제하는 도구이다.
+MongoDB에서 아카이빙이 필요한 도큐먼트를 추출하여 S3 버킷에 보관 및 삭제하는 도구
 ![image](https://github.com/user-attachments/assets/999b973a-03b0-4b67-94a4-c40f92e0fc53)
 
 # How to build
@@ -15,11 +15,11 @@ $ go build .
 -archive-check-interval 60 \
 -collection "test" \
 -database "test" \
--host "mongodb+srv://<user>:<password>@test.db.prod.ilevit.com/?tls=false" \
+-host "mongodb+srv://<user>:<password>@test.db.bumhwak.com/?tls=false" \
 -s3-bucket-uri "levit-database-archive-prod/test/" \
 -s3-upload-interval 80 \
 -archive-field "createdAt" \
--query-limit 1000
+-query-limit 100
 ```
 
 # Push to AWS ECR
