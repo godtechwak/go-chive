@@ -29,6 +29,8 @@ data:
       bucket: bumhwak-test/test2
       uploadInterval: 180
 
+secretName: db-secret
+
 livenessProbe: {}
 
 readinessProbe: {}
