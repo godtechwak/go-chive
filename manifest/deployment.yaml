@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-chive-deployment
+  labels:
+    app: go-chive
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-chive
+  template:
+    metadata:
+      labels:
+        app: go-chive
+    spec:
+      serviceAccountName: <service account>
+      containers:
+      - name: go-chive
+        image: <ecr url>/db/go-chive:1.0.0-go-chive
+        env:
+        - name: AGE_LIMIT
+          value: "1d"
+        - name: ARCHIVE_CHECK_INTERVAL
+          value: "60"
+        - name: COLLECTION
+          value: "<collection name>"
+        - name: DATABASE
+          value: "<database name>"
+        - name: PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: gochive
+        - name: S3_BUCKET_URI
+          value: "bumhwak-test/test/"
+        - name: S3_UPLOAD_INTERVAL
+          value: "180"
+        - name: ARCHIVE_FIELD
+          value: "createdAt"
+        args:
+        - -age-limit=$(AGE_LIMIT)
+        - -archive-check-interval=$(ARCHIVE_CHECK_INTERVAL)
+        - -collection=$(COLLECTION)
+        - -database=$(DATABASE)
+        - -host=mongodb+srv://levit_admin:$(PASSWORD)@test.db.prod.ilevit.com/?tls=false
+        - -s3-bucket-uri=$(S3_BUCKET_URI)
+        - -s3-upload-interval=$(S3_UPLOAD_INTERVAL)
+        - -archive-field=$(ARCHIVE_FIELD)
+        - -queryLimit 100
