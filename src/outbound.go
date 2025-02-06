@@ -12,12 +12,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // S3에 도큐먼트 아카이빙
@@ -33,7 +33,7 @@ func PerformS3Upload(bucket string, ctx context.Context, collection *mongo.Colle
 	archiveName := fmt.Sprintf("archive_%s.tar.gz", timestamp)
 
 	// JSON 파일 압축
-	err = createTarGz("/tmp/" + archiveName, files)
+	err = createTarGz("/tmp/"+archiveName, files)
 	if err != nil {
 		log.Printf("Failed to create tar.gz file: %v", err)
 		return
@@ -73,9 +73,9 @@ func PerformS3Upload(bucket string, ctx context.Context, collection *mongo.Colle
 
 	// 도큐먼트 삭제
 	err = DeleteArchivedDocs(ctx, collection, docs, logFile)
-    if err != nil {
-        log.Printf("Error deleting archived documents: %v", err)
-    }
+	if err != nil {
+		log.Printf("Error deleting archived documents: %v", err)
+	}
 
 	// 도큐먼트 삭제되었는지 검증
 	VerifyDeletion(ctx, collection, docs)
@@ -140,7 +140,7 @@ func createTarGz(outputName string, files []os.FileInfo) error {
 
 // S3에 아카이빙한 이후 도큐먼트 삭제
 func DeleteArchivedDocs(ctx context.Context, collection *mongo.Collection, docs []map[string]interface{}, logFile string) error {
-	logFileHandle, err := os.OpenFile("/tmp/" + logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logFileHandle, err := os.OpenFile("/tmp/"+logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %w", err)
 	}
@@ -179,7 +179,7 @@ func DeleteArchivedDocs(ctx context.Context, collection *mongo.Collection, docs 
 		}
 		if res.DeletedCount == 0 {
 			log.Printf("No documents deleted for ID: %s", objectID.Hex())
-		} 
+		}
 		//else {
 		//	logFileHandle.WriteString(fmt.Sprintf("Deleted document ID: %s\n", objectID.Hex()))
 		//}
@@ -231,7 +231,7 @@ func VerifyDeletion(ctx context.Context, collection *mongo.Collection, docs []ma
 func deleteLocalFiles(files []os.FileInfo, archiveName string) {
 	// JSON 파일 삭제
 	for _, file := range files {
-		if filepath.Ext("/tmp/" + file.Name()) == ".json" {
+		if filepath.Ext("/tmp/"+file.Name()) == ".json" {
 			if err := os.Remove("/tmp/" + file.Name()); err != nil {
 				log.Printf("Failed to delete local JSON file %s: %v", file.Name(), err)
 			} else {
@@ -247,5 +247,3 @@ func deleteLocalFiles(files []os.FileInfo, archiveName string) {
 		log.Printf("Successfully deleted tar.gz file: %s", archiveName)
 	}
 }
-
-
