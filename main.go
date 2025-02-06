@@ -5,30 +5,33 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"go_chive/util"
 	"go_chive/src"
+	"go_chive/util"
 )
 
+var ArchiveMutex sync.Mutex
+
 type Config struct {
-	MongoURI            string
-	DatabaseName        string
-	CollectionName      string
-	S3Bucket            string
-	AgeLimit            string
-	ArchiveField        string
-	QueryLimit          int64
-	S3UploadInterval    int
+	MongoURI             string
+	DatabaseName         string
+	CollectionName       string
+	S3Bucket             string
+	AgeLimit             string
+	ArchiveField         string
+	QueryLimit           int64
+	S3UploadInterval     int
 	ArchiveCheckInterval int
 }
 
 /* go-chive flow
-	(1) processDocuments() -> saveToLocalFile() by "archiveCheckInterval"
-	(2) performS3Upload() -> deleteArchivedDocs() -> delete a localfile by "s3UploadInterval"
+(1) processDocuments() -> saveToLocalFile() by "archiveCheckInterval"
+(2) performS3Upload() -> deleteArchivedDocs() -> delete a localfile by "s3UploadInterval"
 */
 
 func main() {
@@ -47,23 +50,23 @@ func main() {
 	archiveField := flag.String("archive-field", "", "Field name for filtering documents to archive")
 	flag.Parse()
 
-    /* 
+	/*
 		===================
 		- 옵션 플래그 제한 조건
 		===================
-		newDocs slice에 append되는 최대 크기는 1024MB(1GB)로 제한(메모리 사용 제한)한다.
+		newDocs slice에 append되는 최대 크기는 2048MB(2GB)로 제한(메모리 사용 제한)한다.
 		이 제한은 s3Ticker 타이머가 발동되는 시점에 삭제할 수 있는 도큐먼트의 최대 크기를 결정한다.
 
 		최대 크기 제한 산식은 다음과 같다.
-		==> QueryLimit * (s3UploadInterval / archiveCheckInterval) < 1024
+		==> QueryLimit * (s3UploadInterval / archiveCheckInterval) < 2048
 		(단, 1개 도큐먼트의 최대 크기를 1MB로 가정)
 
-		ex1) 
+		ex1)
 			- QueryLimit = 1200
 			- s3UploadInterval = 120
 			- archiveCheckInterval = 60
 		==> 1200 * (120 / 60) = 2400 --> 실행 불가
-		
+
 		ex2)
 			- QueryLimit = 100
 			- s3UploadInterval = 600
@@ -71,10 +74,10 @@ func main() {
 		==> 100 * (600 / 60) = 1000 --> 실행 가능
 
 		ex3)
-			- QueryLimit = 5000 
+			- QueryLimit = 5000
 			- s3UploadInterval = 60
 			- archiveCheckInterval = 60
-		==> 5000 * (60 / 60) = 1000 --> 실행 불가
+		==> 5000 * (60 / 60) = 5000 --> 실행 불가
 
 		ex4)
 			- QueryLimit = 10
@@ -85,14 +88,14 @@ func main() {
 	*/
 
 	cfg := Config{
-		MongoURI:            *mongoURI,
-		DatabaseName:        *databaseName,
-		CollectionName:      *collectionName,
-		S3Bucket:            *s3Bucket,
-		AgeLimit:            *ageLimit,
-		ArchiveField:        *archiveField,
-		QueryLimit:          *queryLimit,
-		S3UploadInterval:    *s3UploadInterval,
+		MongoURI:             *mongoURI,
+		DatabaseName:         *databaseName,
+		CollectionName:       *collectionName,
+		S3Bucket:             *s3Bucket,
+		AgeLimit:             *ageLimit,
+		ArchiveField:         *archiveField,
+		QueryLimit:           *queryLimit,
+		S3UploadInterval:     *s3UploadInterval,
 		ArchiveCheckInterval: *archiveCheckInterval,
 	}
 
@@ -123,8 +126,11 @@ func main() {
 
 	collection := client.Database(cfg.DatabaseName).Collection(cfg.CollectionName)
 
+	// lastProcessedID 초기화 여부I(1이면 초기화)
+	isInit := 0
+
 	// 아카이빙할 도큐먼트 검색
-	src.ProcessDocuments(ctx, collection, cfg.ArchiveField, ageDuration, cfg.S3Bucket, *logFile, cfg.QueryLimit)
+	src.ProcessDocuments(ctx, collection, cfg.ArchiveField, ageDuration, cfg.S3Bucket, *logFile, cfg.QueryLimit, isInit)
 
 	// 아카이브 타이머 생성
 	ticker := time.NewTicker(time.Duration(cfg.ArchiveCheckInterval) * time.Second)
@@ -135,29 +141,37 @@ func main() {
 	defer s3Ticker.Stop()
 
 	var newDocs []map[string]interface{} // 신규로 조회한 도큐먼트
-	var docs []map[string]interface{} // 누적되는 도큐먼트
+	var docs []map[string]interface{}    // 누적되는 도큐먼트
+
 	for {
+		// ticker.C와 s3Ticker 타이머의 시간이 겹칠 때는 1개 타이머만 동작하도록 뮤텍스 잠금을 건다.
 		select {
 		case <-ticker.C:
-			newDocs = src.ProcessDocuments(ctx, collection, cfg.ArchiveField, ageDuration, cfg.S3Bucket, *logFile, cfg.QueryLimit)
+			ArchiveMutex.Lock()
+			newDocs = src.ProcessDocuments(ctx, collection, cfg.ArchiveField, ageDuration, cfg.S3Bucket, *logFile, cfg.QueryLimit, isInit)
 			if len(newDocs) > 0 {
 				docs = append(docs, newDocs...)
 				log.Println("Documents ready for archiving.")
+				isInit = 0
 			}
+			ArchiveMutex.Unlock()
 		case <-s3Ticker.C:
+			ArchiveMutex.Lock()
 			fmt.Printf("%d\n", len(docs))
 			if len(docs) > 0 {
-				src.PerformS3Upload(cfg.S3Bucket, ctx, collection, docs, *logFile)
+				src.PerformS3Upload(cfg.S3Bucket, ctx, collection, docs, *logFile) // 도큐먼트 삭제 로직 포함
 				docs = nil
+				isInit = 1 // lastProcessedID를 초기화하여 중간에 건너뛴 도큐먼트를 처리한다.
 			}
+			ArchiveMutex.Unlock()
 		}
 	}
 }
 
 func validateFlags(cfg Config) {
 	calculatedSize := cfg.QueryLimit * int64(cfg.S3UploadInterval) / int64(cfg.ArchiveCheckInterval)
-	if calculatedSize >= 1024 {
-		log.Fatalf("Invalid configuration: QueryLimit * (S3UploadInterval / ArchiveCheckInterval) must be less than 1024. Current value: %d", calculatedSize)
+	if calculatedSize >= 2048 {
+		log.Fatalf("Invalid configuration: QueryLimit * (S3UploadInterval / ArchiveCheckInterval) must be less than 2048. Current value: %d", calculatedSize)
 	}
 
 	if cfg.S3UploadInterval <= cfg.ArchiveCheckInterval {
