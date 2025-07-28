@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -32,7 +33,7 @@ func PerformS3Upload(bucket string, ctx context.Context, collection *mongo.Colle
 	timestamp := time.Now().Format("20060102_150405")
 	archiveName := fmt.Sprintf("archive_%s.tar.gz", timestamp)
 
-	// JSON 파일 압축
+	// BSON 파일 압축
 	err = createTarGz("/tmp/"+archiveName, files)
 	if err != nil {
 		log.Printf("Failed to create tar.gz file: %v", err)
@@ -77,14 +78,11 @@ func PerformS3Upload(bucket string, ctx context.Context, collection *mongo.Colle
 		log.Printf("Error deleting archived documents: %v", err)
 	}
 
-	// 도큐먼트 삭제되었는지 검증
-	VerifyDeletion(ctx, collection, docs)
-
-	// JSON 파일과 tar.gz 파일 삭제
+	// BSON 파일과 tar.gz 파일 삭제
 	deleteLocalFiles(files, archiveName)
 }
 
-// JSON 파일들을 tar.gz로 압축
+// BSON 파일들을 tar.gz로 압축
 func createTarGz(outputName string, files []os.FileInfo) error {
 	outFile, err := os.Create(outputName)
 	if err != nil {
@@ -99,7 +97,7 @@ func createTarGz(outputName string, files []os.FileInfo) error {
 	defer tarWriter.Close()
 
 	for _, file := range files {
-		if filepath.Ext(file.Name()) != ".json" {
+		if filepath.Ext(file.Name()) != ".bson" {
 			continue
 		}
 
@@ -146,96 +144,62 @@ func DeleteArchivedDocs(ctx context.Context, collection *mongo.Collection, docs 
 	}
 	defer logFileHandle.Close()
 
+	var wg sync.WaitGroup
+
 	for _, doc := range docs {
-		rawID, ok := doc["_id"]
-		if !ok {
-			log.Printf("Document does not have an '_id' field: %v", doc)
-			continue
-		}
+		wg.Add(1)
 
-		var objectID primitive.ObjectID
+		go func(doc map[string]interface{}) {
+			defer wg.Done()
 
-		// `_id` 필드 타입 확인 및 변환
-		switch id := rawID.(type) {
-		case primitive.ObjectID:
-			objectID = id
-		case string:
-			// 문자열 타입이면 ObjectID로 변환 시도
-			parsedID, err := primitive.ObjectIDFromHex(id)
-			if err != nil {
-				log.Printf("Invalid ObjectID format for ID: %s, error: %v", id, err)
-				continue
+			rawID, ok := doc["_id"]
+			if !ok {
+				log.Printf("Document does not have an '_id' field: %v", doc)
+				return
 			}
-			objectID = parsedID
-		default:
-			log.Printf("Unsupported '_id' type: %T for document: %v", id, doc)
-			continue
-		}
 
-		// MongoDB에서 문서 삭제
-		res, err := collection.DeleteOne(ctx, bson.M{"_id": objectID})
-		if err != nil {
-			return fmt.Errorf("failed to delete document %s: %w", objectID.Hex(), err)
-		}
-		if res.DeletedCount == 0 {
-			log.Printf("No documents deleted for ID: %s", objectID.Hex())
-		}
-		//else {
-		//	logFileHandle.WriteString(fmt.Sprintf("Deleted document ID: %s\n", objectID.Hex()))
-		//}
+			var objectID primitive.ObjectID
+			switch id := rawID.(type) {
+			case primitive.ObjectID:
+				objectID = id
+			case string:
+				parsedID, err := primitive.ObjectIDFromHex(id)
+				if err != nil {
+					log.Printf("Invalid ObjectID format for ID: %s, error: %v", id, err)
+					return
+				}
+				objectID = parsedID
+			default:
+				log.Printf("Unsupported '_id' type: %T for document: %v", id, doc)
+				return
+			}
+
+			// MongoDB에서 문서 삭제
+			res, err := collection.DeleteOne(ctx, bson.M{"_id": objectID})
+			if err != nil {
+				log.Printf("Failed to delete document %s: %v", objectID.Hex(), err)
+				return
+			}
+			if res.DeletedCount == 0 {
+				log.Printf("No documents deleted for ID: %s", objectID.Hex())
+			}
+		}(doc)
 	}
 
+	wg.Wait()
 	log.Printf("Processed %d documents for deletion.", len(docs))
 	return nil
 }
 
-// MongoDB에서 도큐먼트 삭제 여부 확인
-func VerifyDeletion(ctx context.Context, collection *mongo.Collection, docs []map[string]interface{}) {
-	for _, doc := range docs {
-		rawID, ok := doc["_id"]
-		if !ok {
-			log.Printf("Document does not have an '_id' field: %v", doc)
-			continue
-		}
-
-		var objectID primitive.ObjectID
-
-		switch id := rawID.(type) {
-		case primitive.ObjectID:
-			objectID = id
-		case string:
-			parsedID, err := primitive.ObjectIDFromHex(id)
-			if err != nil {
-				log.Printf("Invalid ObjectID format for ID: %s, error: %v", id, err)
-				continue
-			}
-			objectID = parsedID
-		default:
-			log.Printf("Unsupported '_id' type: %T for document: %v", id, doc)
-			continue
-		}
-
-		filter := bson.M{"_id": objectID}
-		count, err := collection.CountDocuments(ctx, filter)
-		if err != nil {
-			log.Printf("Error verifying deletion for ID %s: %v", objectID.Hex(), err)
-			continue
-		}
-		if count > 0 {
-			log.Printf("Document with ID %s still exists in the collection!", objectID.Hex())
-		}
-	}
-}
-
-// JSON 파일과 tar.gz 파일 삭제
+// BSON 파일과 tar.gz 파일 삭제
 func deleteLocalFiles(files []os.FileInfo, archiveName string) {
-	// JSON 파일 삭제
+	// BSON 파일 삭제
 	for _, file := range files {
-		if filepath.Ext("/tmp/"+file.Name()) == ".json" {
+		if filepath.Ext("/tmp/"+file.Name()) == ".bson" {
 			if err := os.Remove("/tmp/" + file.Name()); err != nil {
-				log.Printf("Failed to delete local JSON file %s: %v", file.Name(), err)
+				log.Printf("Failed to delete local BSON file %s: %v", file.Name(), err)
 			} else {
-				log.Printf("Successfully deleted local JSON file: %s", file.Name())
+				log.Printf("Successfully deleted local BSON file: %s", file.Name())
 			}
 		}
 	}

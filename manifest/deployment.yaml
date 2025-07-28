@@ -14,26 +14,26 @@ spec:
       labels:
         app: go-chive
     spec:
-      serviceAccountName: <service account>
+      serviceAccountName: db-manager-account
       containers:
       - name: go-chive
-        image: <ecr url>/db/go-chive:1.0.0-go-chive
+        image: 760230531610.dkr.ecr.ap-northeast-2.amazonaws.com/db/go-chive:1.5-go-chive
         env:
         - name: AGE_LIMIT
           value: "1d"
         - name: ARCHIVE_CHECK_INTERVAL
           value: "60"
         - name: COLLECTION
-          value: "<collection name>"
+          value: "test"
         - name: DATABASE
-          value: "<database name>"
+          value: "test"
         - name: PASSWORD
           valueFrom:
             secretKeyRef:
-              name: db-secret
-              key: gochive
+              name: alwayz-prod-db-admin-secret
+              key: levit_admin
         - name: S3_BUCKET_URI
-          value: "bumhwak-test/test/"
+          value: "levit-database-backup-prod/test/"
         - name: S3_UPLOAD_INTERVAL
           value: "180"
         - name: ARCHIVE_FIELD
@@ -47,4 +47,4 @@ spec:
         - -s3-bucket-uri=$(S3_BUCKET_URI)
         - -s3-upload-interval=$(S3_UPLOAD_INTERVAL)
         - -archive-field=$(ARCHIVE_FIELD)
-        - -queryLimit 100
+        #- -queryLimit 1000
