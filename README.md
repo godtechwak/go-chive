@@ -34,8 +34,8 @@ $ go build .
 -archive-check-interval 60 \
 -collection "test" \
 -database "test" \
--host "mongodb+srv://<user>:<password>@test.db.prod.ilevit.com/?tls=false" \
--s3-bucket-uri "levit-database-archive-prod/test/" \
+-host "mongodb+srv://<user>:<password>@test.db.prod.silver.com/?tls=false" \
+-s3-bucket-uri "silver-database-archive-prod/test/" \
 -s3-upload-interval 80 \
 -archive-field "createdAt" \
 -query-limit 1000
@@ -68,20 +68,18 @@ $ docker buildx build \
 ```
 
 # How to add new collection
-`devops-gitops-manifest > clusters > alwayz-prod-eks > workloads > db-go-chive > values.yaml`
-values.yaml 파일에 아래와 같이 신규 컬렉션 정보를 등록하고 배포하면 완료
 ```shell
 # archiveField에는 반드시 인덱스가 생성되어 있어야 하며, 생성이 누락되면 COLSCAN 수행되어 DB에 부하가 발생합니다.
-  - name: incubator-offerwall-event-log
-    hostAddress: "incubator"
+  - name: commerce-cart-log
+    hostAddress: "commerce"
     ageLimit: 92d
     queryLimit: 2000
     archiveCheckInterval: 9
-    collection: offerwall_event_log
-    database: ALWAYZ
+    collection: cart_log
+    database: commerce
     archiveField: createdAt
     s3:
-      bucket: levit-database-archive-prod/incubator/offerwall_event_log/
+      bucket: silver-database-archive-prod/commerce/cart_log/
       uploadInterval: 65
 ```
 - `name`: go-chive 파드명
