@@ -1,5 +1,5 @@
 # gochive
-![real_gochive](https://github.com/user-attachments/assets/52f00f49-2e7c-4c00-a97e-9a0bcf517eb0)
+<img width="1536" height="1024" alt="gochive" src="https://github.com/user-attachments/assets/78810b5c-dac9-4a6b-8285-9eba60c25152" />
 
 ```plaintext
 go-chive는 MongoDB에서 아카이빙이 필요한 도큐먼트를 추출하여 S3 버킷에 보관하고 해당 도큐먼트를 삭제한다.
