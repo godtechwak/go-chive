@@ -1,6 +1,7 @@
 # go-chive
 MongoDB에서 아카이빙이 필요한 도큐먼트를 추출하여 S3 버킷에 보관 및 삭제하는 도구
-![image](https://github.com/user-attachments/assets/999b973a-03b0-4b67-94a4-c40f92e0fc53)
+<img width="1536" height="1024" alt="gochive" src="https://github.com/user-attachments/assets/0618bf4c-9ed3-4c86-94f4-eb9b28ac673c" />
+
 
 # How to build
 ```shell
