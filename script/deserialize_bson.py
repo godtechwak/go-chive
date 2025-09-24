@@ -5,7 +5,7 @@ from bson import decode_all
 """
     bson 포맷의 데이터를 역직렬화하여 MongoDB 컬렉션에 삽입한다. 즉 아카이빙 되기 전 상태로 복원한다.
 """
-client = MongoClient("mongodb+srv://<USER>:<PASSWORD>@alfarm-v2.db.prod.ilevit.com/?tls=false")
+client = MongoClient("mongodb+srv://<USER>:<PASSWORD>@<mongodb uri>/?tls=false")
 db = client["<database name>"]
 collection = db["<collection name>"]
 
